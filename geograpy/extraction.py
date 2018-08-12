@@ -1,4 +1,5 @@
-import nltk
+from nltk import word_tokenize, pos_tag, ne_chunk
+from nltk import Tree
 from newspaper import Article
 from .utils import remove_non_ascii
 
@@ -11,7 +12,7 @@ class Extractor(object):
         self.text = text
         self.url = url
         self.places = []
-    
+
     def set_text(self):
         if not self.text and self.url:
             a = Article(self.url)
@@ -19,14 +20,21 @@ class Extractor(object):
             a.parse()
             self.text = a.text
 
-
     def find_entities(self):
+        """ 
+        Below modified code can also extract the label of each Name Entity from the text for cities like "New York"
+        """
         self.set_text()
+        chunked = ne_chunk(pos_tag(word_tokenize(remove_non_ascii(self.text))))
+        current_chunk = []
 
-        text = nltk.word_tokenize(self.text)
-        nes = nltk.ne_chunk(nltk.pos_tag(text))
-
-        for ne in nes:
-            if type(ne) is nltk.tree.Tree:
-                if (ne.label() == 'GPE' or ne.label() == 'PERSON' or ne.label() == 'ORGANIZATION'):
-                    self.places.append(u' '.join([i[0] for i in ne.leaves()]))
+        for subtree in chunked:
+            if type(subtree) == Tree and (subtree.label() in ['GPE', 'GEO', 'ORGANIZATION', 'FACILITY', 'LOCATION']) and subtree[0][1] == 'NNP':
+                current_chunk.append(" ".join([token for token, pos in subtree.leaves()]))
+            elif current_chunk:
+                named_entity = " ".join(current_chunk)
+                if named_entity not in self.places:
+                    self.places.append(named_entity)
+                    current_chunk = []
+            else:
+                continue
